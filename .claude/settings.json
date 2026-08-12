@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(./gradlew.bat compileDebugKotlin compileDebugJavaWithJavac --console=plain -q)",
+      "Bash(./gradlew.bat assembleDebug --console=plain -q)"
+    ]
+  }
+}

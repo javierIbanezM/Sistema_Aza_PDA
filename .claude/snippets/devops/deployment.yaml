@@ -1,0 +1,41 @@
+# snippets/devops/deployment.yaml
+# Deployment con requests/limits y probes diferenciados — ver recipes/deploy-kubernetes-application.md.
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pedidos-service
+  labels: { app: pedidos-service }
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: pedidos-service }
+  template:
+    metadata:
+      labels: { app: pedidos-service }
+    spec:
+      securityContext:
+        runAsNonRoot: true
+      containers:
+        - name: app
+          image: 123456789.dkr.ecr.eu-west-1.amazonaws.com/pedidos-service:REPLACE_WITH_SHA
+          ports: [{ containerPort: 8080 }]
+          resources:
+            requests: { cpu: "250m", memory: "256Mi" }
+            limits: { cpu: "500m", memory: "512Mi" }
+          readinessProbe:
+            httpGet: { path: /health/ready, port: 8080 }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /health/live, port: 8080 }
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          envFrom:
+            - configMapRef: { name: pedidos-config }
+            - secretRef: { name: pedidos-secrets }
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1

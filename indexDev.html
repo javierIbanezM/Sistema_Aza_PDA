@@ -1,0 +1,1029 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Sistema PDA Aza</title>
+
+<style>
+*, *::before, *::after {
+box-sizing: border-box;
+}
+body {
+font-family: Arial, sans-serif;
+background: #f2f2f2;
+display: flex;
+justify-content: center;
+align-items: center;
+min-height: 100vh;
+min-height: 100svh;
+margin: 0;
+padding: 16px;
+overflow-x: hidden;
+}
+.card {
+background: white;
+padding: clamp(16px, 5vw, 30px);
+border-radius: 12px;
+width: 100%;
+max-width: 400px;
+text-align: center;
+box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+max-height: calc(100vh - 32px);
+max-height: calc(100svh - 32px);
+overflow-y: auto;
+}
+h2 {
+font-size: clamp(18px, 5vw, 22px);
+margin: 0 0 12px;
+}
+input, button {
+width: 100%;
+padding: 14px 12px;
+margin: 7px 0;
+border-radius: 8px;
+border: 1px solid #ccc;
+font-size: clamp(14px, 4vw, 16px);
+min-height: 48px;
+}
+button {
+background: #007bff;
+color: white;
+border: none;
+font-weight: bold;
+cursor: pointer;
+touch-action: manipulation;
+}
+button:disabled {
+background: #ccc;
+cursor: not-allowed;
+}
+#menu, #error {
+display: none;
+margin-top: 14px;
+}
+#error {
+color: #dc3545;
+font-weight: bold;
+white-space: pre-line;
+font-size: clamp(13px, 3.5vw, 15px);
+}
+.logo-img {
+max-width: clamp(90px, 35vw, 150px);
+height: auto;
+margin-bottom: 14px;
+}
+.btn-logout {
+background: #dc3545 !important;
+}
+.btn-secondary {
+background: #6c757d !important;
+}
+.admin-only {
+display: none;
+}
+/* Exclusivo de Admin (extraField1): oculto también para Encargado (extraField2) e Ingeniería (extraField1==="Ingenieria") */
+.full-admin-only {
+display: none;
+}
+/* Exclusivo de Ingeniería (extraField1==="Ingenieria") y Admin */
+.ingenieria-only {
+display: none;
+}
+
+/* ── Panel Admin ── */
+#panelAdmin {
+display: none;
+margin-top: 14px;
+text-align: left;
+}
+#panelAdmin h3 {
+text-align: center;
+font-size: clamp(16px, 4.5vw, 19px);
+margin: 0 0 14px;
+color: #333;
+}
+.admin-seccion {
+background: #f8f9fa;
+border: 1px solid #e0e0e0;
+border-radius: 10px;
+padding: 14px;
+margin-bottom: 14px;
+}
+.admin-seccion h4 {
+margin: 0 0 10px;
+font-size: clamp(13px, 3.5vw, 15px);
+color: #444;
+}
+.admin-select {
+width: 100%;
+padding: 10px;
+border-radius: 8px;
+border: 1px solid #ccc;
+font-size: clamp(13px, 3.5vw, 15px);
+margin-bottom: 8px;
+background: white;
+min-height: 44px;
+}
+.admin-msg {
+font-size: 13px;
+margin-top: 6px;
+min-height: 18px;
+font-weight: bold;
+}
+.admin-msg.ok  { color: #28a745; }
+.admin-msg.err { color: #dc3545; }
+.pda-alerta-row {
+display: flex;
+align-items: center;
+justify-content: space-between;
+padding: 9px 4px;
+border-bottom: 1px solid #e8e8e8;
+font-size: clamp(13px, 3.5vw, 14px);
+gap: 8px;
+}
+.pda-alerta-row:last-child { border-bottom: none; }
+.pda-alerta-row span { line-height: 1.4; }
+.btn-alerta-on  { background: #dc3545; color: white; border: none; border-radius: 6px; padding: 7px 11px; cursor: pointer; font-size: 12px; font-weight: bold; white-space: nowrap; flex-shrink: 0; }
+.btn-alerta-off { background: #28a745; color: white; border: none; border-radius: 6px; padding: 7px 11px; cursor: pointer; font-size: 12px; font-weight: bold; white-space: nowrap; flex-shrink: 0; }
+.btn-alerta-on:disabled, .btn-alerta-off:disabled { background: #ccc; cursor: not-allowed; }
+
+/* ── Overlay de alerta ── */
+@keyframes flashAlerta {
+    0%,  49% { background: #0033cc; }
+    50%, 100% { background: #cc0000; }
+}
+#alertaOverlay {
+display: none;
+position: fixed;
+inset: 0;
+z-index: 99999;
+flex-direction: column;
+justify-content: center;
+align-items: center;
+text-align: center;
+padding: 32px;
+color: white;
+}
+#alertaOverlay.activa {
+display: flex;
+animation: flashAlerta 0.8s step-start infinite;
+}
+#alertaIcono {
+font-size: clamp(56px, 18vw, 90px);
+margin-bottom: 20px;
+}
+#alertaMsg {
+font-size: clamp(22px, 6vw, 32px);
+font-weight: bold;
+line-height: 1.4;
+text-shadow: 0 2px 10px rgba(0,0,0,0.5);
+}
+#alertaMsg span {
+display: block;
+font-size: 0.65em;
+font-weight: normal;
+margin-top: 14px;
+}
+</style>
+</head>
+<body>
+
+<div class="card">
+<img src="/static/aza-logistics.png" class="logo-img" alt="Aza Logistics" onerror="this.style.display='none'">
+
+<h2 id="pdaLabel">Cargando...</h2>
+
+<div id="login">
+<input id="usuario" placeholder="Usuario" autocomplete="username" onkeydown="if(event.key==='Enter') document.getElementById('pin').focus()">
+<input id="pin" placeholder="PIN" type="password" autocomplete="current-password" onkeydown="if(event.key==='Enter') login()">
+<button id="loginBtn" onclick="login()" disabled>Iniciar sesión</button>
+
+<div id="error"></div>
+
+<div id="loading" style="display:none; color:#007bff; font-weight:bold; margin-top:10px;">
+Iniciando sesión...
+</div>
+</div>
+
+<div id="menu">
+
+<div id="usuarioActivoLabel" style="font-size:13px;color:#666;margin-bottom:8px;"></div>
+
+<button id="alertaAdminsBtn" style="background:#dc3545 !important;" onclick="enviarAlertaRapida()">🚨 Enviar alerta</button>
+
+<button onclick="AndroidApp.abrirApp('es.tlsi.mobile')">📦 Whales</button>
+<button onclick="AndroidApp.abrirApp('com.android.calculator2') || AndroidApp.abrirApp('com.google.android.calculator')">
+  📦 Calculadora
+</button>
+<button onclick="_ventanaCDMuelles = window.open('http://192.168.2.20/Planificador/login.php?entorno=cdmuelles', '_blank')">🚚 CD Muelles</button>
+<button class="admin-only" onclick="AndroidApp.abrirApp('com.aza.scanner')">📦 Carga paqueteria</button>
+<button onclick="_ventanaActivaLink = window.open('https://azalogistics.activalink.com/index.php?action=Login&module=Users', '_blank')">🚚 ActivaLink</button>
+<button
+  onclick="AndroidApp.abrirApp('com.google.android.apps.docs') || (_ventanaActivaLink = window.open('intent://drive.google.com/#Intent;scheme=https;package=com.google.android.apps.docs;end'))">
+ 📦 Drive
+</button>
+<input type="file" id="cameraInput" accept="image/*" capture="environment" style="display:none;" onchange="handleImageCapture(this)">
+<button onclick="document.getElementById('cameraInput').click()" class="btn-secondary">📷 Cámara/Galeria</button>
+<button class="btn-secondary" onclick="if (typeof AndroidApp !== 'undefined' && AndroidApp.abrirAjustesPantalla) AndroidApp.abrirAjustesPantalla()">🔆 Ajustes de pantalla</button>
+<button class="admin-only" onclick="if (typeof AndroidApp !== 'undefined' && AndroidApp.abrirWalkie) AndroidApp.abrirWalkie()">🎙️ Walkie</button>
+<button class="ingenieria-only" onclick="AndroidApp.abrirApp('com.datalogic.scan')">🔧 Scan Demo</button>
+<button class="full-admin-only" onclick="AndroidApp.abrirApp('com.datalogic.scan2deploy')">📦 Scan2deploy</button>
+<button class="full-admin-only" style="background:#6f42c1 !important;" onclick="abrirPanelAdmin()">⚙️ Panel Admin</button>
+
+<button class="btn-logout" onclick="logout()">Cerrar sesión</button>
+</div>
+
+<!-- Panel Administrador -->
+<div id="panelAdmin">
+  <h3>⚙️ Panel Administrador</h3>
+
+  <div class="admin-seccion">
+    <h4>📋 Asignar PDA a usuario</h4>
+    <select id="adminSelectUsuario" class="admin-select">
+      <option value="">-- Selecciona usuario --</option>
+    </select>
+    <select id="adminSelectPDA" class="admin-select">
+      <option value="">-- Selecciona PDA --</option>
+    </select>
+    <button onclick="asignarPDA()" style="margin:4px 0 0; padding:10px;">Asignar PDA</button>
+    <div id="adminMsgAsignar" class="admin-msg"></div>
+  </div>
+
+  <div class="admin-seccion">
+    <h4>⭐ Gestión de Encargados</h4>
+    <select id="adminSelectEncargado" class="admin-select">
+      <option value="">-- Selecciona usuario --</option>
+    </select>
+    <button onclick="cambiarEncargado(true)" style="margin:4px 0 0; padding:10px;">⭐ Conceder Encargado</button>
+    <button class="btn-secondary" onclick="cambiarEncargado(false)" style="margin:4px 0 0; padding:10px;">Quitar Encargado</button>
+    <div id="adminMsgEncargado" class="admin-msg"></div>
+  </div>
+
+  <div class="admin-seccion">
+    <h4>🔧 Gestión de Ingeniería</h4>
+    <select id="adminSelectIngenieria" class="admin-select">
+      <option value="">-- Selecciona usuario --</option>
+    </select>
+    <button onclick="cambiarIngenieria(true)" style="margin:4px 0 0; padding:10px;">🔧 Conceder Ingeniería</button>
+    <button class="btn-secondary" onclick="cambiarIngenieria(false)" style="margin:4px 0 0; padding:10px;">Quitar Ingeniería</button>
+    <div id="adminMsgIngenieria" class="admin-msg"></div>
+  </div>
+
+  <div class="admin-seccion">
+    <h4>🚨 Activar / Desactivar alerta por PDA</h4>
+    <div id="adminListaAlertas" style="color:#999; font-size:13px;">Cargando...</div>
+    <button class="btn-secondary" onclick="renderListaAlertas()" style="margin-top:10px; padding:8px; font-size:13px;">🔄 Actualizar</button>
+  </div>
+
+  <button class="btn-secondary" onclick="cerrarPanelAdmin()" style="margin-top:4px;">�?Volver al menú</button>
+</div>
+
+</div>
+
+<script>
+/* FASTAPI */
+const API = "http://192.168.2.33:8002";
+const API_PDAS = `${API}/pdas/`;
+const API_USUARIOS = `${API}/usuarios/`;
+const API_LOGIN = `${API}/logs/login`;
+const API_LOGOUT = `${API}/logs/logout`;
+const API_HEARTBEAT = `${API}/logs/heartbeat`;
+
+let USUARIO_ACTUAL = null;
+let PDA_NUMERO = null;
+let LOGOUT_EN_PROCESO = false;
+let ALERTA_ACTIVA = false;
+let _audioCtx = null;
+let _alertaSoundLoop = null;
+let _ventanaCDMuelles = null;
+let _ventanaActivaLink = null;
+
+function _iniciarSonido() {
+    try {
+        _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        _audioCtx.resume(); // desbloquear contexto suspendido en Android
+        let toggle = false;
+        _alertaSoundLoop = setInterval(() => {
+            try {
+                if (_audioCtx.state === 'suspended') _audioCtx.resume();
+                const osc = _audioCtx.createOscillator();
+                const gain = _audioCtx.createGain();
+                osc.connect(gain);
+                gain.connect(_audioCtx.destination);
+                osc.type = 'sawtooth';
+                osc.frequency.value = toggle ? 920 : 520;
+                gain.gain.setValueAtTime(0.6, _audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, _audioCtx.currentTime + 0.3);
+                osc.start(_audioCtx.currentTime);
+                osc.stop(_audioCtx.currentTime + 0.32);
+                toggle = !toggle;
+            } catch(e) {}
+        }, 380);
+    } catch(e) {}
+}
+
+function _pararSonido() {
+    if (_alertaSoundLoop) { clearInterval(_alertaSoundLoop); _alertaSoundLoop = null; }
+    try { if (_audioCtx) { _audioCtx.close(); _audioCtx = null; } } catch(e) {}
+}
+
+function activarAlerta(usuarioOrigen) {
+    if (ALERTA_ACTIVA) return;
+    ALERTA_ACTIVA = true;
+    // Cerrar pestañas externas abiertas
+    try { if (_ventanaCDMuelles && !_ventanaCDMuelles.closed) { _ventanaCDMuelles.close(); _ventanaCDMuelles = null; } } catch(e) {}
+    try { if (_ventanaActivaLink && !_ventanaActivaLink.closed) { _ventanaActivaLink.close(); _ventanaActivaLink = null; } } catch(e) {}
+    // Cerrar app Whales si está abierta
+    try { if (typeof AndroidApp !== "undefined") AndroidApp.cerrarApp('es.tlsi.mobile'); } catch(e) {}
+    // Forzar volumen al máximo vía interfaz nativa Android
+    try {
+        if (typeof AndroidApp !== "undefined") {
+            AndroidApp.setVolumenMaximo();
+            AndroidApp.activarAlerta();
+        }
+    } catch(e) {}
+    let elOrigen = document.getElementById("alertaActivadaPor");
+    if (elOrigen) {
+        if (usuarioOrigen) {
+            elOrigen.innerText = "Activada por: " + usuarioOrigen;
+            elOrigen.style.display = "block";
+        } else {
+            elOrigen.style.display = "none";
+        }
+    }
+    document.getElementById("alertaOverlay").classList.add("activa");
+    _iniciarSonido();
+}
+
+function desactivarAlerta() {
+    if (!ALERTA_ACTIVA) return;
+    ALERTA_ACTIVA = false;
+    try { if (typeof AndroidApp !== "undefined") AndroidApp.restaurarVolumen(); } catch(e) {}
+    try { if (typeof AndroidApp !== "undefined") AndroidApp.desactivarAlerta(); } catch(e) {}
+    document.getElementById("alertaOverlay").classList.remove("activa");
+    document.getElementById("alertaUsuario").value = "";
+    document.getElementById("alertaPin").value = "";
+    document.getElementById("alertaError").innerText = "";
+    let elOrigen = document.getElementById("alertaActivadaPor");
+    if (elOrigen) elOrigen.style.display = "none";
+    _pararSonido();
+}
+
+async function loginDesdeAlerta() {
+    const u = document.getElementById("alertaUsuario").value.trim();
+    const p = document.getElementById("alertaPin").value;
+    const errEl = document.getElementById("alertaError");
+    const btn = document.getElementById("alertaLoginBtn");
+    if (!u || !p) { errEl.innerText = "Complete los campos"; return; }
+    btn.disabled = true;
+    errEl.innerText = "";
+    try {
+        let resp = await fetch(`${API_USUARIOS}?usuario=${encodeURIComponent(u)}`);
+        let users = await resp.json();
+        if (!users.length || String(users[0].pin) !== String(p).trim()) {
+            errEl.innerText = "Usuario o PIN incorrecto";
+            return;
+        }
+        let user = users[0];
+        let esAdmin = user.extraField1 === "Admin";
+        let esEncargado = Number(user.extraField2) === 1;
+        let esIngenieria = user.extraField1 === "Ingenieria";
+        if (!esAdmin && !esEncargado && !esIngenieria) {
+            errEl.innerText = "Solo Admin, Encargado o Ingeniería pueden desactivar la alerta";
+            return;
+        }
+        await fetch(`${API}/pdas/device/${encodeURIComponent(getDeviceId())}/alerta`, { method: "DELETE" });
+        desactivarAlerta();
+        // Iniciar sesión en el menú principal
+        USUARIO_ACTUAL = u;
+        aplicarPermisos(esAdmin, esEncargado, esIngenieria);
+        sessionStorage.setItem("session", JSON.stringify({ usuario: u, numPDA: PDA_NUMERO, esAdmin, esEncargado, esIngenieria }));
+        document.getElementById("login").style.display = "none";
+        document.getElementById("menu").style.display = "block";
+        document.getElementById("usuarioActivoLabel").innerText = "Usuario: " + u;
+        enviarHeartbeat();
+    } catch(e) {
+        errEl.innerText = "Error de conexión";
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+/* ── ALERTA RÁPIDA: solo a las PDA donde haya un Encargado con sesión activa ahora
+   mismo. No hay tabla de "sesión activa" en el backend, así que se infiere del
+   heartbeat (POST cada 30s mientras hay sesión, ver enviarHeartbeat): se toma el
+   heartbeat más reciente de cada Encargado y se considera "activo" si tiene menos
+   de VENTANA_HEARTBEAT_MS (3x el intervalo, margen para jitter de red). ── */
+const VENTANA_HEARTBEAT_MS = 90000;
+
+async function enviarAlertaRapida() {
+    const btn = document.getElementById("alertaAdminsBtn");
+    btn.disabled = true;
+    try {
+        let [rUsuarios, rHeartbeats] = await Promise.all([fetch(API_USUARIOS), fetch(API_HEARTBEAT)]);
+        let usuarios = await rUsuarios.json();
+        let heartbeats = await rHeartbeats.json();
+
+        let encargados = new Set(
+            usuarios.filter(u => Number(u.extraField2) === 1).map(u => (u.usuario || "").toLowerCase())
+        );
+        if (!encargados.size) {
+            alert("No hay ningún usuario con perfil Encargado configurado.");
+            return;
+        }
+
+        // Heartbeat más reciente por usuario Encargado (case-insensitive: el log tiene
+        // el usuario con mayúsculas/minúsculas inconsistentes según cómo se tecleó).
+        let ultimaPorUsuario = new Map();
+        heartbeats.forEach(h => {
+            let u = (h.usuario || "").toLowerCase();
+            if (!encargados.has(u)) return;
+            let prev = ultimaPorUsuario.get(u);
+            if (!prev || h.fecha > prev.fecha) ultimaPorUsuario.set(u, h);
+        });
+
+        let ahora = Date.now();
+        let dispositivos = [...new Set(
+            [...ultimaPorUsuario.values()]
+                .filter(h => ahora - new Date(h.fecha.replace(" ", "T")).getTime() <= VENTANA_HEARTBEAT_MS)
+                .map(h => h.device)
+        )];
+
+        if (!dispositivos.length) {
+            alert("Ningún Encargado tiene sesión activa en una PDA ahora mismo.");
+            return;
+        }
+
+        let qsUsuario = "?usuario=" + encodeURIComponent(USUARIO_ACTUAL || "");
+        await Promise.all(dispositivos.map(device =>
+            fetch(`${API}/pdas/device/${encodeURIComponent(device)}/alerta${qsUsuario}`, { method: "POST" }).catch(() => {})
+        ));
+
+        alert("Alerta enviada a " + dispositivos.length + " dispositivo(s) con Encargado activo.");
+    } catch (e) {
+        alert("Error al enviar la alerta.");
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+/* ── PANEL ADMIN ── */
+let _adminPDAs = [];
+let _adminUsuarios = [];
+
+async function abrirPanelAdmin() {
+    document.getElementById("menu").style.display = "none";
+    document.getElementById("panelAdmin").style.display = "block";
+    document.getElementById("adminMsgAsignar").innerText = "";
+    document.getElementById("adminMsgEncargado").innerText = "";
+    document.getElementById("adminMsgIngenieria").innerText = "";
+    await cargarDatosAdmin();
+}
+
+function cerrarPanelAdmin() {
+    document.getElementById("panelAdmin").style.display = "none";
+    document.getElementById("menu").style.display = "block";
+}
+
+async function cargarDatosAdmin() {
+    try {
+        let [rPDAs, rUsuarios] = await Promise.all([
+            fetch(API_PDAS),
+            fetch(API_USUARIOS)
+        ]);
+        _adminPDAs = await rPDAs.json();
+        _adminUsuarios = await rUsuarios.json();
+
+        // Rellenar select de usuarios
+        const selU = document.getElementById("adminSelectUsuario");
+        const prevU = selU.value;
+        selU.innerHTML = '<option value="">-- Selecciona usuario --</option>';
+        _adminUsuarios
+            .filter(u => u.extraField1 !== "Admin")
+            .forEach(u => {
+                const opt = document.createElement("option");
+                opt.value = u.id;
+                opt.textContent = `${u.usuario}  (PDA: ${u.numPDA ?? '-'})`;
+                if (String(u.id) === prevU) opt.selected = true;
+                selU.appendChild(opt);
+            });
+
+        // Rellenar select de Encargados (excluye Admin: ya tiene todos los permisos)
+        const selE = document.getElementById("adminSelectEncargado");
+        const prevE = selE.value;
+        selE.innerHTML = '<option value="">-- Selecciona usuario --</option>';
+        _adminUsuarios
+            .filter(u => u.extraField1 !== "Admin")
+            .forEach(u => {
+                const opt = document.createElement("option");
+                opt.value = u.id;
+                opt.textContent = `${u.usuario}${Number(u.extraField2) === 1 ? "  ⭐ (Encargado)" : ""}`;
+                if (String(u.id) === prevE) opt.selected = true;
+                selE.appendChild(opt);
+            });
+
+        // Rellenar select de Ingeniería (excluye Admin: ya tiene todos los permisos)
+        const selI = document.getElementById("adminSelectIngenieria");
+        const prevI = selI.value;
+        selI.innerHTML = '<option value="">-- Selecciona usuario --</option>';
+        _adminUsuarios
+            .filter(u => u.extraField1 !== "Admin")
+            .forEach(u => {
+                const opt = document.createElement("option");
+                opt.value = u.id;
+                opt.textContent = `${u.usuario}${u.extraField1 === "Ingenieria" ? "  🔧 (Ingeniería)" : ""}`;
+                if (String(u.id) === prevI) opt.selected = true;
+                selI.appendChild(opt);
+            });
+
+        // Rellenar select de PDAs
+        const selP = document.getElementById("adminSelectPDA");
+        const prevP = selP.value;
+        selP.innerHTML = '<option value="">-- Selecciona PDA --</option>';
+        _adminPDAs
+            .filter(p => p.numPDA)
+            .sort((a, b) => a.numPDA - b.numPDA)
+            .forEach(p => {
+                const opt = document.createElement("option");
+                opt.value = p.numPDA;
+                opt.textContent = `PDA ${p.numPDA}`;
+                if (String(p.numPDA) === prevP) opt.selected = true;
+                selP.appendChild(opt);
+            });
+
+        await renderListaAlertas();
+    } catch(e) {
+        document.getElementById("adminListaAlertas").innerHTML = '<span style="color:#dc3545;">Error cargando datos</span>';
+    }
+}
+
+async function renderListaAlertas() {
+    const lista = document.getElementById("adminListaAlertas");
+    lista.innerHTML = '<span style="color:#999;font-size:13px;">Cargando...</span>';
+    const pdasConDevice = _adminPDAs.filter(p => p.device && p.numPDA).sort((a,b) => a.numPDA - b.numPDA);
+    if (!pdasConDevice.length) {
+        lista.innerHTML = '<span style="color:#999;font-size:13px;">No hay PDAs registradas</span>';
+        return;
+    }
+    const estados = await Promise.all(pdasConDevice.map(async p => {
+        try {
+            let r = await fetch(`${API}/pdas/device/${encodeURIComponent(p.device)}/alerta`);
+            let d = await r.json();
+            return { ...p, alertaActiva: d.alerta };
+        } catch(e) { return { ...p, alertaActiva: false }; }
+    }));
+    lista.innerHTML = "";
+    estados.forEach(p => {
+        const row = document.createElement("div");
+        row.className = "pda-alerta-row";
+        row.innerHTML = `
+            <span><b>PDA ${p.numPDA}</b><br><small style="color:#888">${p.device}</small></span>
+            <button class="${p.alertaActiva ? 'btn-alerta-on' : 'btn-alerta-off'}"
+                onclick="toggleAlertaPDA('${p.device}', ${!p.alertaActiva}, this)">
+                ${p.alertaActiva ? '🔕 Desactivar' : '🚨 Activar'}
+            </button>`;
+        lista.appendChild(row);
+    });
+}
+
+async function toggleAlertaPDA(device, activar, btn) {
+    btn.disabled = true;
+    try {
+        let qs = activar ? "?usuario=" + encodeURIComponent(USUARIO_ACTUAL || "") : "";
+        await fetch(`${API}/pdas/device/${encodeURIComponent(device)}/alerta${qs}`, {
+            method: activar ? "POST" : "DELETE"
+        });
+        await renderListaAlertas();
+    } catch(e) { btn.disabled = false; }
+}
+
+async function asignarPDA() {
+    const usuarioId = document.getElementById("adminSelectUsuario").value;
+    const numPDA    = document.getElementById("adminSelectPDA").value;
+    const msgEl     = document.getElementById("adminMsgAsignar");
+    msgEl.className = "admin-msg";
+    msgEl.innerText = "";
+    if (!usuarioId || !numPDA) {
+        msgEl.className = "admin-msg err";
+        msgEl.innerText = "Selecciona usuario y PDA";
+        return;
+    }
+    try {
+        let r = await fetch(`${API_USUARIOS}${usuarioId}`, {
+            method: "PUT",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({ numPDA: Number(numPDA) })
+        });
+        if (!r.ok) throw new Error();
+        msgEl.className = "admin-msg ok";
+        msgEl.innerText = "�?PDA asignada correctamente";
+        await cargarDatosAdmin();
+    } catch(e) {
+        msgEl.className = "admin-msg err";
+        msgEl.innerText = "Error al asignar PDA";
+    }
+}
+
+// Mismo endpoint que asignarPDA() (PUT parcial sobre el usuario), aplicado a extraField2.
+async function cambiarEncargado(activar) {
+    const usuarioId = document.getElementById("adminSelectEncargado").value;
+    const msgEl      = document.getElementById("adminMsgEncargado");
+    msgEl.className = "admin-msg";
+    msgEl.innerText = "";
+    if (!usuarioId) {
+        msgEl.className = "admin-msg err";
+        msgEl.innerText = "Selecciona un usuario";
+        return;
+    }
+    try {
+        let r = await fetch(`${API_USUARIOS}${usuarioId}`, {
+            method: "PUT",
+            headers: {"Content-Type": "application/json"},
+            // extraField2 es un entero en el backend (a diferencia de extraField1, que
+            // acepta texto): 1 = Encargado, null = sin rol. Enviar un string aquí
+            // devuelve 422 (int_parsing) — comprobado contra el backend real.
+            body: JSON.stringify({ extraField2: activar ? 1 : null })
+        });
+        if (!r.ok) throw new Error();
+        msgEl.className = "admin-msg ok";
+        msgEl.innerText = activar ? "⭐ Encargado concedido" : "Encargado retirado";
+        await cargarDatosAdmin();
+    } catch(e) {
+        msgEl.className = "admin-msg err";
+        msgEl.innerText = "Error al cambiar el rol";
+    }
+}
+
+// Mismo endpoint que asignarPDA() (PUT parcial sobre el usuario). Reutiliza extraField1 en
+// vez de un extraField3 propio: el backend no tenía ese campo declarado en su modelo y los
+// cambios no se guardaban (comprobado en directo — el PUT devolvía 200 pero no persistía).
+// extraField1 ya existe y ya admite texto libre (hoy solo se usa para "Admin"), así que
+// "Ingenieria" convive con eso sin tocar el backend: son valores mutuamente excluyentes del
+// mismo campo, pero un Admin ya ve todo lo de Ingeniería igualmente (ver aplicarPermisos), así
+// que no hace falta que un usuario sea las dos cosas a la vez.
+async function cambiarIngenieria(activar) {
+    const usuarioId = document.getElementById("adminSelectIngenieria").value;
+    const msgEl      = document.getElementById("adminMsgIngenieria");
+    msgEl.className = "admin-msg";
+    msgEl.innerText = "";
+    if (!usuarioId) {
+        msgEl.className = "admin-msg err";
+        msgEl.innerText = "Selecciona un usuario";
+        return;
+    }
+    try {
+        let r = await fetch(`${API_USUARIOS}${usuarioId}`, {
+            method: "PUT",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({ extraField1: activar ? "Ingenieria" : null })
+        });
+        if (!r.ok) throw new Error();
+        msgEl.className = "admin-msg ok";
+        msgEl.innerText = activar ? "🔧 Ingeniería concedida" : "Ingeniería retirada";
+        await cargarDatosAdmin();
+    } catch(e) {
+        msgEl.className = "admin-msg err";
+        msgEl.innerText = "Error al cambiar el rol";
+    }
+}
+
+// esEncargado (extraField2) y esIngenieria (extraField1 === "Ingenieria") tienen los mismos
+// permisos que esAdmin salvo Scan2deploy/Scan/Panel Admin (.full-admin-only), y además Walkie.
+// esIngenieria además ve el botón exclusivo "Scan Demo" (.ingenieria-only), que ni Admin "a
+// secas" ni Encargado ven salvo que también sean Ingeniería (Admin sí lo ve, como todo lo demás).
+function aplicarPermisos(esAdmin, esEncargado, esIngenieria) {
+    document.querySelectorAll('.admin-only').forEach(el => {
+        el.style.display = (esAdmin || esEncargado || esIngenieria) ? 'block' : 'none';
+    });
+    document.querySelectorAll('.full-admin-only').forEach(el => {
+        el.style.display = esAdmin ? 'block' : 'none';
+    });
+    document.querySelectorAll('.ingenieria-only').forEach(el => {
+        el.style.display = (esAdmin || esIngenieria) ? 'block' : 'none';
+    });
+}
+
+
+/*  FUNCIONES AUXILIARES*/
+
+// Abre la URL en el navegador del sistema (Activity aparte), no en el propio WebView:
+// un window.open() con URL normal navegaría fuera de indexDev.html y mataría el polling
+// de alertas hasta volver al menú. Fallback a window.open si la APK instalada es antigua
+// y aún no tiene ese método nativo.
+function abrirEnNavegador(url) {
+    if (typeof AndroidApp !== "undefined" && AndroidApp.abrirNavegador) {
+        AndroidApp.abrirNavegador(url);
+    } else {
+        window.open(url, '_blank');
+    }
+}
+
+function getDeviceId(){
+    if (typeof AndroidApp !== "undefined" && AndroidApp.getSerialNumber) {
+        try {
+            return AndroidApp.getSerialNumber().trim().toUpperCase();
+        } catch(e) {
+            return "ID_ERROR";
+        }
+    }
+    return "NO_PDA";
+}
+
+
+async function getCoords(){
+return new Promise((resolve) => {
+if (!navigator.geolocation) return resolve({lat:0,lng:0});
+navigator.geolocation.getCurrentPosition(
+p => resolve({lat:p.coords.latitude, lng:p.coords.longitude}),
+() => resolve({lat:0,lng:0}),
+{timeout:5000, enableHighAccuracy:true}
+);
+});
+}
+
+function showError(msg){
+document.getElementById("error").innerText = msg;
+document.getElementById("error").style.display = msg ? "block" : "none";
+}
+
+
+
+
+
+async function inicializar(){
+try {
+
+        let deviceId = getDeviceId();
+        deviceId = deviceId.trim().toUpperCase();
+        const encoded = encodeURIComponent(deviceId);
+
+        let resp = await fetch(`${API_PDAS}device/${encoded}`);
+
+        if (!resp.ok) {
+            let respAll = await fetch(API_PDAS);
+            let all = await respAll.json();
+            let match = all.find(p => p.device && p.device.trim().toUpperCase() === deviceId);
+            if (!match) throw new Error("No existe PDA");
+            PDA_NUMERO = match.numPDA;
+        } else {
+            let data = await resp.json();
+            PDA_NUMERO = data.numPDA;
+        }
+
+        document.getElementById("pdaLabel").innerText = "PDA " + PDA_NUMERO;
+        document.getElementById("loginBtn").disabled = false;
+
+        // Comprobar si hay alerta activa para este dispositivo
+        try {
+            let ra = await fetch(`${API}/pdas/device/${encodeURIComponent(deviceId)}/alerta`);
+            let da = await ra.json();
+            if (da.alerta) activarAlerta(da.usuario);
+        } catch(e) {}
+
+        // Restaurar sesión guardada si corresponde a esta PDA
+        let sesionGuardada = sessionStorage.getItem("session");
+        if (sesionGuardada) {
+            try {
+                let s = JSON.parse(sesionGuardada);
+                if (s.usuario && s.numPDA === PDA_NUMERO) {
+                    USUARIO_ACTUAL = s.usuario;
+                    aplicarPermisos(s.esAdmin === true, s.esEncargado === true, s.esIngenieria === true);
+                    document.getElementById("login").style.display = "none";
+                    document.getElementById("menu").style.display = "block";
+                    document.getElementById("usuarioActivoLabel").innerText = "Usuario: " + s.usuario;
+                }
+            } catch(e) {
+                sessionStorage.removeItem("session");
+            }
+        }
+
+} catch(e){
+    document.getElementById("pdaLabel").innerText = "No registrado";
+    let deviceId = getDeviceId();
+    try {
+        await fetch(`${API}/pdas/`, {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({ device: deviceId, imei: "string", estadoPDA: "string" })
+        });
+        showError("Dispositivo registrado."+ deviceId +"\nContacte al administrador para asignar número de PDA.");
+    } catch(e2) {
+        showError("ID detectado: " + deviceId + "\nNo coincide con ninguna PDA registrada.");
+    }
+}
+}
+
+// LOGIN 
+async function login(){
+let u = document.getElementById("usuario").value.trim();
+let p = document.getElementById("pin").value;
+
+if (!u || !p || !PDA_NUMERO){
+showError("Complete todos los campos");
+return;
+}
+
+showError("");
+document.getElementById("loading").style.display = "block";
+document.getElementById("loginBtn").disabled = true;
+
+try {
+ // Buscar usuario
+let respUser = await fetch(`${API_USUARIOS}?usuario=${encodeURIComponent(u)}`);
+let users = await respUser.json();
+
+if (!users.length) {
+  showError("Usuario no encontrado");
+  return;
+}
+
+let user = users[0];
+
+if (String(user.pin) !== String(p).trim()) {
+  showError("PIN incorrecto");
+  return;
+}
+
+// Verificar que el usuario tiene asignada esta PDA (Admin, Encargado e Ingeniería pueden usar cualquiera)
+if (user.extraField1 !== "Admin" && user.extraField1 !== "Ingenieria" && Number(user.extraField2) !== 1) {
+  let pdaAsignada = Number(user.numPDA);
+  let pdaOpcional = Number(user.pdaOpcional);
+  if (pdaAsignada !== PDA_NUMERO && pdaOpcional !== PDA_NUMERO) {
+    showError("No tienes permiso para usar esta PDA"+"\nTu PDA asignada es la: "+user.numPDA);
+    return;
+  }
+}
+
+        // Registrar login
+let coords = await getCoords();
+
+await fetch(API_LOGIN, {
+method: "POST",
+headers: {"Content-Type":"application/json"},
+body: JSON.stringify({
+usuario: u,
+pda: PDA_NUMERO,
+device: getDeviceId(),
+lat: coords.lat,
+lng: coords.lng
+})
+});
+
+let esAdmin = user.extraField1 === "Admin";
+let esEncargado = Number(user.extraField2) === 1;
+let esIngenieria = user.extraField1 === "Ingenieria";
+// Admin/Encargado/Ingeniería que hace login desactiva la alerta del dispositivo
+if ((esAdmin || esEncargado || esIngenieria) && ALERTA_ACTIVA) {
+    try {
+        await fetch(`${API}/pdas/device/${encodeURIComponent(getDeviceId())}/alerta`, { method: "DELETE" });
+    } catch(e) {}
+    desactivarAlerta();
+}
+USUARIO_ACTUAL = u;
+sessionStorage.setItem("session", JSON.stringify({ usuario: u, numPDA: PDA_NUMERO, esAdmin, esEncargado, esIngenieria }));
+aplicarPermisos(esAdmin, esEncargado, esIngenieria);
+document.getElementById("login").style.display = "none";
+document.getElementById("menu").style.display = "block";
+document.getElementById("usuarioActivoLabel").innerText = "Usuario: " + u;
+document.getElementById("pin").value = "";
+enviarHeartbeat();
+
+} catch(e){
+showError("Error de conexión");
+} finally {
+document.getElementById("loginBtn").disabled = false;
+document.getElementById("loading").style.display = "none";
+}
+}
+
+/* LOGOUT  */
+async function logout(){
+if (LOGOUT_EN_PROCESO) return;
+LOGOUT_EN_PROCESO = true;
+
+if (!USUARIO_ACTUAL || !PDA_NUMERO){
+location.reload();
+return;
+}
+
+let coords = await getCoords();
+
+try {
+await fetch(API_LOGOUT, {
+method: "POST",
+headers: {"Content-Type":"application/json"},
+body: JSON.stringify({
+usuario: USUARIO_ACTUAL,
+pda: PDA_NUMERO,
+device: getDeviceId(),
+lat: coords.lat,
+lng: coords.lng
+})
+});
+} catch(e){}
+
+USUARIO_ACTUAL = null;
+aplicarPermisos(false);
+sessionStorage.removeItem("session");
+location.reload();
+}
+
+/* ALERTA: polling cada 10s independiente del login */
+setInterval(async () => {
+    try {
+        let r = await fetch(`${API}/pdas/device/${encodeURIComponent(getDeviceId())}/alerta`);
+        let d = await r.json();
+        if (d.alerta && !ALERTA_ACTIVA) {
+            // Alerta nueva detectada: cerrar ventanas externas y recargar
+            // para que el overlay aparezca encima de cualquier pantalla
+            try { if (_ventanaCDMuelles && !_ventanaCDMuelles.closed) { _ventanaCDMuelles.close(); _ventanaCDMuelles = null; } } catch(e) {}
+            try { if (_ventanaActivaLink && !_ventanaActivaLink.closed) { _ventanaActivaLink.close(); _ventanaActivaLink = null; } } catch(e) {}
+            location.reload();
+        } else if (!d.alerta) {
+            desactivarAlerta();
+        }
+    } catch(e) {}
+}, 10000);
+
+/* ASIGNACIÓN DE PDA: verificar cada 30s si el usuario sigue asignado */
+setInterval(async () => {
+    if (!USUARIO_ACTUAL || !PDA_NUMERO) return;
+    try {
+        let r = await fetch(`${API_USUARIOS}?usuario=${encodeURIComponent(USUARIO_ACTUAL)}`);
+        let users = await r.json();
+        let user = users[0];
+        if (!user || (
+            user.extraField1 !== "Admin" &&
+            user.extraField1 !== "Ingenieria" &&
+            Number(user.extraField2) !== 1 &&
+            Number(user.numPDA) !== PDA_NUMERO &&
+            Number(user.pdaOpcional) !== PDA_NUMERO
+        )) {
+            await logout();
+        }
+    } catch(e) {}
+}, 30000);
+
+/* SEÑAL INACTIVIDAD */
+async function enviarHeartbeat() {
+    if (!USUARIO_ACTUAL || !PDA_NUMERO) return;
+    try {
+        await fetch(API_HEARTBEAT, {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({
+                usuario: USUARIO_ACTUAL,
+                pda: PDA_NUMERO,
+                device: getDeviceId()
+            })
+        });
+    } catch(e) {}
+}
+setInterval(enviarHeartbeat, 30000);
+
+/* Tiempo de espera (7 minutos) */
+let ultimoMovimiento = Date.now();
+["touchstart","click","keydown","mousemove"].forEach(ev => 
+document.addEventListener(ev, () => ultimoMovimiento = Date.now())
+);
+
+setInterval(async () => {
+if (USUARIO_ACTUAL && PDA_NUMERO){
+if (Date.now() - ultimoMovimiento > 7 * 60 * 1000){
+await logout();
+}
+}
+}, 5000);
+
+window.onload = inicializar;
+</script>
+
+<!-- Overlay de alerta -->
+<div id="alertaOverlay">
+  <div id="alertaIcono">🚨</div>
+  <div id="alertaMsg">
+    PDA PERDIDA
+    <span>Por favor póngase en contacto con<br>Sistemas o su Responsable</span>
+    <div id="alertaActivadaPor" style="display:none; margin-top:10px; font-size:15px; font-weight:bold;"></div>
+  </div>
+  <div id="alertaLogin" style="margin-top:24px; width:100%; max-width:300px;">
+    <input id="alertaUsuario" placeholder="Usuario admin" autocomplete="username"
+      style="width:100%; padding:12px; border-radius:8px; border:none; font-size:16px; margin-bottom:8px; color:#000;">
+    <input id="alertaPin" placeholder="PIN" type="password" autocomplete="current-password"
+      style="width:100%; padding:12px; border-radius:8px; border:none; font-size:16px; margin-bottom:8px; color:#000;">
+    <button id="alertaLoginBtn" onclick="loginDesdeAlerta()"
+      style="width:100%; padding:12px; border-radius:8px; border:none; background:#fff; color:#0033cc; font-size:16px; font-weight:bold; cursor:pointer;">
+      Desactivar alerta
+    </button>
+    <div id="alertaError" style="color:#ffdddd; font-size:14px; margin-top:8px; min-height:20px;"></div>
+  </div>
+</div>
+
+<div id="adminEscape"
+style="position:fixed; bottom:0; right:0; width:60px; height:60px; opacity:0;"
+onclick="AndroidApp.solicitarPinAdmin()">
+</div>
+
+</body>
+</html>

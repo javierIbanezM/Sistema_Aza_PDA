@@ -1,0 +1,6 @@
+<resources>
+    <string name="app_name">Sistema PDA Aza</string>
+    <string name="notif_channel_name">Walkie service</string>
+    <string name="notif_title">WalkieLAN active</string>
+    <string name="ptt_accessibility_desc">Allows capturing a hardware key (e.g. Volume Up) as Push-To-Talk while the app is in the background.</string>
+</resources>

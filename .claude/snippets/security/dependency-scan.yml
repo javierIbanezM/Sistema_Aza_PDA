@@ -1,0 +1,44 @@
+# snippets/security/dependency-scan.yml
+# Escaneo de dependencias bloqueante + generación de SBOM — ver recipes/security-scan-dependencies.md.
+
+name: Security Scan
+
+on:
+  push: { branches: [main] }
+  pull_request: { branches: [main] }
+  schedule:
+    - cron: '0 6 * * *'  # re-escaneo diario, ver knowledge/security/vulnerability-management.md
+
+jobs:
+  dependency-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Escaneo de vulnerabilidades (bloqueante)
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          severity: 'CRITICAL,HIGH'
+          exit-code: '1'  # falla el pipeline ante hallazgos críticos/altos
+
+      - name: Generar SBOM (CycloneDX)
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
+          syft packages dir:. -o cyclonedx-json > sbom.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: sbom.json
+          retention-days: 90
+
+  rescan-produccion:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Re-escanear imagen en producción
+        run: trivy image --severity CRITICAL,HIGH $ECR_REPO:produccion-actual
+      - name: Notificar hallazgos
+        if: failure()
+        run: curl -X POST $SLACK_WEBHOOK -d '{"text":"Vulnerabilidad detectada en producción — ver knowledge/security/vulnerability-management.md para triage"}'

@@ -1,0 +1,33 @@
+# snippets/devops/helm-values.yaml
+# Values.yaml para instalar una dependencia de terceros (ejemplo: ingress-nginx).
+# Ver decisions/helm-vs-kustomize.md — Helm para dependencias de terceros, Kustomize para manifiestos propios.
+
+replicaCount: 2
+
+resources:
+  requests: { cpu: "100m", memory: "128Mi" }
+  limits: { cpu: "200m", memory: "256Mi" }
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 6
+  targetCPUUtilizationPercentage: 70
+
+service:
+  type: LoadBalancer
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-internal: "true"  # nunca expuesto públicamente sin justificar
+
+securityContext:
+  runAsNonRoot: true
+  readOnlyRootFilesystem: true
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1  # garantiza disponibilidad durante actualizaciones de nodos/mantenimiento
+
+metrics:
+  enabled: true
+  serviceMonitor:
+    enabled: true  # integración con Prometheus, ver knowledge/devops/monitoring.md
