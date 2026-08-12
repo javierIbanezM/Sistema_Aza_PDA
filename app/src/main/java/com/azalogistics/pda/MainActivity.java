@@ -3,9 +3,12 @@ package com.azalogistics.pda;
 import android.Manifest;
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.app.DownloadManager;
+import android.content.BroadcastReceiver;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
@@ -69,6 +72,8 @@ public class MainActivity extends Activity {
     // PIN de emergencia solo para cuando no hay conexión y por tanto no se puede
     // validar contra el servidor. Distinto del PIN real, que vive en el backend.
     private static final String PIN_EMERGENCIA_OFFLINE = "9731";
+    // Debe coincidir con la constante del mismo nombre en indexDev.html/index.html.
+    private static final String URL_ACTUALIZACION = "http://192.168.2.33:5000/updates/versionPDA.json";
     private ValueCallback<Uri[]> filePathCallback;
     private Uri photoUri;
     private int volumenAnterior = -1;
@@ -76,6 +81,8 @@ public class MainActivity extends Activity {
     private final Handler alertaSoundHandler = new Handler(Looper.getMainLooper());
     private Runnable alertaSoundRunnable;
     private boolean bloqueoAjustesSuspendidoPorAdmin = false;
+    private long descargaActualizacionId = -1;
+    private BroadcastReceiver descargaCompletadaReceiver;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -91,13 +98,28 @@ public class MainActivity extends Activity {
                 LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f);
         webView.setLayoutParams(params);
 
+        // Recargar la página también relanza inicializar() en el JS, que ya comprueba
+        // actualizaciones — así que este botón hace de "recargar" y "buscar actualización" a
+        // la vez, sin duplicar un botón aparte para eso. Solo icono, azul y con esquinas
+        // redondeadas para un aspecto más moderno que el botón de texto plano de antes.
+        float densidad = getResources().getDisplayMetrics().density;
         Button btnRetry = new Button(this);
-        btnRetry.setText("Recargar página");
+        btnRetry.setText("🔄");
+        btnRetry.setTextSize(22);
+        android.graphics.drawable.GradientDrawable fondoRecargar = new android.graphics.drawable.GradientDrawable();
+        fondoRecargar.setColor(0xFF007BFF);
+        fondoRecargar.setCornerRadius(28 * densidad);
+        btnRetry.setBackground(fondoRecargar);
         btnRetry.setOnClickListener(v -> cargarWebConOffline());
         btnRetry.setOnLongClickListener(v -> {
             mostrarDialogoPin();
             return true;
         });
+        LinearLayout.LayoutParams paramsBtnRetry = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, (int) (52 * densidad));
+        int margenBtnRetry = (int) (12 * densidad);
+        paramsBtnRetry.setMargins(margenBtnRetry, margenBtnRetry, margenBtnRetry, margenBtnRetry);
+        btnRetry.setLayoutParams(paramsBtnRetry);
 
         layout.addView(webView);
         layout.addView(btnRetry);
@@ -110,6 +132,7 @@ public class MainActivity extends Activity {
 
         ocultarBarras();
         bloquearBarraNotificaciones();
+        registrarReceptorDescarga();
         WalkieService.Companion.start(this);
 
         WebSettings settings = webView.getSettings();
@@ -224,6 +247,42 @@ public class MainActivity extends Activity {
     }
 
     @Override
+    protected void onDestroy() {
+        if (descargaCompletadaReceiver != null) {
+            try { unregisterReceiver(descargaCompletadaReceiver); } catch (Exception e) { /* ya desregistrado */ }
+        }
+        super.onDestroy();
+    }
+
+    // Popup de "hay versión nueva" (ver indexDev.html/index.html): al terminar la descarga del
+    // APK con DownloadManager, abre el instalador del sistema apuntando al fichero descargado.
+    private void registrarReceptorDescarga() {
+        descargaCompletadaReceiver = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                long id = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1);
+                if (id != descargaActualizacionId) return;
+                try {
+                    File apk = new File(getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "actualizacion.apk");
+                    Uri apkUri = FileProvider.getUriForFile(
+                            MainActivity.this, getPackageName() + ".provider", apk);
+                    Intent instalar = new Intent(Intent.ACTION_VIEW);
+                    instalar.setDataAndType(apkUri, "application/vnd.android.package-archive");
+                    instalar.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                    startActivity(instalar);
+                } catch (Exception e) {
+                    Log.e("PDA", "Error abriendo instalador de la actualización", e);
+                    Toast.makeText(MainActivity.this, "No se pudo abrir el instalador", Toast.LENGTH_LONG).show();
+                }
+            }
+        };
+        ContextCompat.registerReceiver(
+                this, descargaCompletadaReceiver,
+                new IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE),
+                ContextCompat.RECEIVER_EXPORTED);
+    }
+
+    @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
         if (event.getRepeatCount() == 0 && PttManager.INSTANCE.onKeyEvent(keyCode, true)) {
             return true;
@@ -331,6 +390,110 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public String getSerialNumber() {
             return obtenerNumeroSerie();
+        }
+
+        // Número de build instalado (PackageInfo.getLongVersionCode), para que el HTML lo
+        // compare contra el "build_number" del JSON de actualizaciones y decida si mostrar
+        // el popup de "hay versión nueva".
+        @JavascriptInterface
+        public String getBuildNumber() {
+            try {
+                return String.valueOf(getPackageManager()
+                        .getPackageInfo(getPackageName(), 0).getLongVersionCode());
+            } catch (PackageManager.NameNotFoundException e) {
+                return "0";
+            }
+        }
+
+        // Versión legible ("1.4.3"), para mostrarla en pequeño en la pantalla de login.
+        @JavascriptInterface
+        public String getVersionName() {
+            return obtenerVersionApp();
+        }
+
+        // Comprueba si hay actualización disponible por HTTP nativo, no por fetch() del
+        // WebView: el servidor de actualizaciones (puerto 5000) no está pensado para que lo
+        // consulte un navegador (lo usa nativamente com.aza.scanner) y probablemente no manda
+        // cabeceras CORS — un fetch() ahí fallaría en silencio. HttpURLConnection no pasa por
+        // CORS (es una restricción exclusiva de navegador/WebView). Corre en un hilo aparte
+        // para no bloquear el hilo de JS, y avisa al terminar llamando a
+        // recibirInfoActualizacion(json) en la página.
+        // mostrarFeedback=true (botón manual de la esquina del login): informa por Toast del
+        // error concreto si algo falla, en vez de quedarse en silencio como en la comprobación
+        // automática al cargar la pantalla — es lo que hace falta para diagnosticar por qué
+        // no llega el popup (CORS, timeout, servidor caído, JSON mal formado, etc.).
+        @JavascriptInterface
+        public void comprobarActualizacionNativo(boolean mostrarFeedback) {
+            new Thread(() -> {
+                String json = "";
+                String error = null;
+                java.net.HttpURLConnection conn = null;
+                try {
+                    java.net.URL url = new java.net.URL(URL_ACTUALIZACION);
+                    conn = (java.net.HttpURLConnection) url.openConnection();
+                    conn.setConnectTimeout(5000);
+                    conn.setReadTimeout(5000);
+                    conn.setRequestMethod("GET");
+                    int codigo = conn.getResponseCode();
+                    if (codigo == 200) {
+                        java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
+                        InputStream is = conn.getInputStream();
+                        byte[] buffer = new byte[1024];
+                        int leido;
+                        while ((leido = is.read(buffer)) != -1) baos.write(buffer, 0, leido);
+                        is.close();
+                        json = baos.toString("UTF-8");
+                        // Quitar el BOM UTF-8 (bytes EF BB BF, U+FEFF al decodificar) si el
+                        // fichero se guardó con él delante de la '{' — invisible al
+                        // copiar/pegar, pero JSON.parse() lo rechaza como "unexpected token"
+                        // al no ser JSON válido con eso delante.
+                        final char BOM = (char) 0xFEFF;
+                        if (!json.isEmpty() && json.charAt(0) == BOM) json = json.substring(1);
+                    } else {
+                        error = "HTTP " + codigo;
+                    }
+                } catch (Exception e) {
+                    Log.e("PDA", "Error comprobando actualización", e);
+                    error = e.getClass().getSimpleName() + ": " + e.getMessage();
+                } finally {
+                    if (conn != null) conn.disconnect();
+                }
+                String jsonEscapado = json
+                        .replace("\\", "\\\\")
+                        .replace("'", "\\'")
+                        .replace("\n", "")
+                        .replace("\r", "");
+                String errorFinal = error;
+                runOnUiThread(() -> {
+                    if (mostrarFeedback && errorFinal != null) {
+                        Toast.makeText(MainActivity.this, "Error comprobando actualización: " + errorFinal, Toast.LENGTH_LONG).show();
+                    }
+                    webView.evaluateJavascript(
+                            "recibirInfoActualizacion('" + jsonEscapado + "', " + mostrarFeedback + ")", null);
+                });
+            }).start();
+        }
+
+        // Descarga el APK de la URL dada con DownloadManager y, al terminar, abre el
+        // instalador del sistema (ver registrarReceptorDescarga). No instala en silencio: el
+        // usuario tiene que confirmar la instalación en el diálogo estándar de Android.
+        @JavascriptInterface
+        public void descargarActualizacion(String url) {
+            runOnUiThread(() -> {
+                try {
+                    File destino = new File(getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "actualizacion.apk");
+                    if (destino.exists()) destino.delete();
+                    DownloadManager.Request request = new DownloadManager.Request(Uri.parse(url));
+                    request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
+                    request.setDestinationUri(Uri.fromFile(destino));
+                    DownloadManager dm = (DownloadManager) getSystemService(Context.DOWNLOAD_SERVICE);
+                    descargaActualizacionId = dm.enqueue(request);
+                    Toast.makeText(MainActivity.this, "Descargando actualización…", Toast.LENGTH_SHORT).show();
+                } catch (Exception e) {
+                    Log.e("PDA", "Error iniciando la descarga de la actualización", e);
+                    Toast.makeText(MainActivity.this, "No se pudo iniciar la descarga", Toast.LENGTH_LONG).show();
+                }
+            });
         }
 
         // Genera el código de barras (Code128) del texto recibido y lo devuelve como PNG

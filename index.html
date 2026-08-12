@@ -193,6 +193,18 @@ margin-top: 14px;
 <img src="/static/aza-logistics.png" class="logo-img" alt="Aza Logistics" onerror="this.style.display='none'">
 
 <h2 id="pdaLabel">Cargando...</h2>
+<div id="launcherVersion" style="font-size:11px;color:#999;margin:-8px 0 12px;"></div>
+
+<!-- Popup de actualización disponible -->
+<div id="actualizacionPopup" style="display:none; position:fixed; inset:0; z-index:99998; background:rgba(0,0,0,0.5); align-items:center; justify-content:center; padding:20px;">
+  <div style="background:white; border-radius:12px; padding:20px; max-width:320px; width:100%; text-align:center;">
+    <h3 style="margin:0 0 10px;">🆕 Nueva versión disponible</h3>
+    <div id="actualizacionVersion" style="font-weight:bold; color:#007bff; margin-bottom:8px;"></div>
+    <div id="actualizacionChangelog" style="font-size:13px; color:#666; margin-bottom:16px; white-space:pre-line;"></div>
+    <button onclick="descargarActualizacion()" style="margin-bottom:8px;">⬇️ Descargar</button>
+    <button class="btn-secondary" onclick="cerrarPopupActualizacion()">Ahora no</button>
+  </div>
+</div>
 
 <div id="login">
 <input id="usuario" placeholder="Usuario" autocomplete="username" onkeydown="if(event.key==='Enter') document.getElementById('pin').focus()">
@@ -751,8 +763,66 @@ document.getElementById("error").style.display = msg ? "block" : "none";
 
 
 
+/* ── ACTUALIZACIONES: comprobar versión nueva al cargar la pantalla de login.
+   Mismo formato de JSON que usa com.aza.scanner en sus actualizaciones:
+   { "version": "1.4.2", "build_number": 6, "download_url": "http://.../app-debug.apk", "changelog": "..." }
+   La URL del JSON vive en MainActivity.java (URL_ACTUALIZACION, comprobarActualizacionNativo) —
+   la comprobación es nativa, no fetch() del WebView (ver comentario ahí sobre CORS). ── */
+let _urlDescargaPendiente = null;
+
+// El servidor de actualizaciones (puerto 5000) no manda cabeceras CORS — está pensado para
+// que lo consulte com.aza.scanner de forma nativa, no un navegador. Un fetch() aquí fallaría
+// en silencio, así que la comprobación la hace MainActivity por HTTP nativo
+// (comprobarActualizacionNativo) y llama de vuelta a recibirInfoActualizacion() con el JSON.
+function comprobarActualizacion(mostrarFeedback) {
+    if (typeof AndroidApp === "undefined" || !AndroidApp.comprobarActualizacionNativo || !AndroidApp.getBuildNumber) {
+        if (mostrarFeedback) alert("Esta versión instalada no tiene el buscador de actualizaciones (hace falta reinstalar el APK más reciente).");
+        return;
+    }
+    try { AndroidApp.comprobarActualizacionNativo(!!mostrarFeedback); } catch (e) {}
+}
+
+// mostrarFeedback viene del botón manual de la esquina: avisa también cuando NO hay
+// actualización o el JSON no se pudo interpretar, para poder diagnosticar sin adivinar.
+function recibirInfoActualizacion(jsonTexto, mostrarFeedback) {
+    if (!jsonTexto) {
+        if (mostrarFeedback) alert("No se pudo comprobar actualizaciones (revisa el Toast de error nativo que acaba de salir).");
+        return;
+    }
+    try {
+        let data = JSON.parse(jsonTexto);
+        let actual = Number(AndroidApp.getBuildNumber());
+        if (!data.build_number || Number(data.build_number) <= actual) {
+            if (mostrarFeedback) alert("Ya tienes la última versión instalada (build " + actual + ").");
+            return;
+        }
+        _urlDescargaPendiente = data.download_url;
+        document.getElementById("actualizacionVersion").innerText = "Versión " + data.version;
+        document.getElementById("actualizacionChangelog").innerText = data.changelog || "";
+        document.getElementById("actualizacionPopup").style.display = "flex";
+    } catch (e) {
+        if (mostrarFeedback) alert("El JSON de actualización no es válido: " + e.message);
+    }
+}
+
+function descargarActualizacion() {
+    if (_urlDescargaPendiente && typeof AndroidApp !== "undefined" && AndroidApp.descargarActualizacion) {
+        AndroidApp.descargarActualizacion(_urlDescargaPendiente);
+    }
+    cerrarPopupActualizacion();
+}
+
+function cerrarPopupActualizacion() {
+    document.getElementById("actualizacionPopup").style.display = "none";
+}
+
 async function inicializar(){
 try {
+
+        comprobarActualizacion();
+        if (typeof AndroidApp !== "undefined" && AndroidApp.getVersionName) {
+            try { document.getElementById("launcherVersion").innerText = "v" + AndroidApp.getVersionName(); } catch (e) {}
+        }
 
         let deviceId = getDeviceId();
         deviceId = deviceId.trim().toUpperCase();
