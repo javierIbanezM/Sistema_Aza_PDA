@@ -15,7 +15,9 @@ export LANG=C.UTF-8
 
 MENSAJE=$(git log -1 --pretty=%B)
 case "$MENSAJE" in
-  *"[deploy]"*) ;;
+  # Debe EMPEZAR por "[deploy]", no solo contenerlo — si no, un commit que simplemente
+  # menciona la palabra en la descripción (como este mismo hook) lo dispararía sin querer.
+  "[deploy]"*) ;;
   *) exit 0 ;;
 esac
 
