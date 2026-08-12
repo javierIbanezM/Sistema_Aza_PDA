@@ -1,0 +1,66 @@
+#!/bin/sh
+# Se dispara tras cada "git commit" en esta máquina. Solo compila y publica en el
+# servidor de actualizaciones si el mensaje del commit contiene "[deploy]" — así un
+# commit normal de trabajo en curso no despliega nada solo a las PDA de producción.
+#
+# Requiere acceso de escritura a la carpeta de red de abajo (comprobado a mano: ver
+# conversación). Si esa ruta cambia, actualízala aquí.
+#
+# git.exe lanza este hook en un proceso sin locale UTF-8 heredado (a diferencia de una
+# sesión de bash normal), así que sin esto los acentos del changelog salían mal
+# codificados ("botón" -> "botÃ³n"). Forzarlo aquí lo arregla independientemente de
+# qué locale tenga el proceso que invoca el hook.
+export LC_ALL=C.UTF-8
+export LANG=C.UTF-8
+
+MENSAJE=$(git log -1 --pretty=%B)
+case "$MENSAJE" in
+  *"[deploy]"*) ;;
+  *) exit 0 ;;
+esac
+
+echo "[post-commit] '[deploy]' detectado — compilando y publicando actualización..."
+
+REPO_ROOT=$(git rev-parse --show-toplevel)
+cd "$REPO_ROOT" || exit 1
+
+DESTINO="//192.168.2.33/c\$/Users/administrador.ZAR/Desktop/ConfigN8N/printer/updates"
+
+if [ ! -d "$DESTINO" ]; then
+  echo "[post-commit] No se puede acceder a $DESTINO — abortando, nada publicado."
+  exit 1
+fi
+
+VERSION=$(sed -n 's/.*versionName *"\([^"]*\)".*/\1/p' app/build.gradle | head -1)
+BUILD=$(sed -n 's/.*versionCode *\([0-9]*\).*/\1/p' app/build.gradle | head -1)
+
+if [ -z "$VERSION" ] || [ -z "$BUILD" ]; then
+  echo "[post-commit] No se pudo leer versionName/versionCode de app/build.gradle — abortando."
+  exit 1
+fi
+
+CHANGELOG=$(echo "$MENSAJE" | head -1 | sed 's/\[deploy\]//g' | sed 's/"/\\"/g' | sed 's/^ *//;s/ *$//')
+
+echo "[post-commit] Compilando v$VERSION (build $BUILD)..."
+./gradlew.bat assembleDebug --console=plain -q
+if [ $? -ne 0 ]; then
+  echo "[post-commit] La build ha fallado — nada publicado."
+  exit 1
+fi
+
+cp "app/build/outputs/apk/debug/app-debug.apk" "$DESTINO/app-debug.apk"
+if [ $? -ne 0 ]; then
+  echo "[post-commit] No se pudo copiar el APK a $DESTINO."
+  exit 1
+fi
+
+cat > "$DESTINO/versionPDA.json" <<EOF
+{
+  "version": "$VERSION",
+  "build_number": $BUILD,
+  "download_url": "http://192.168.2.33:5000/updates/app-debug.apk",
+  "changelog": "$CHANGELOG"
+}
+EOF
+
+echo "[post-commit] Publicado: v$VERSION (build $BUILD) en $DESTINO"
