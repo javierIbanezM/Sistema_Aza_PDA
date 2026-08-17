@@ -738,12 +738,10 @@ public class MainActivity extends Activity {
                 .show();
     }
 
-    // Limpia la preferencia de "usar esta app siempre" para HOME y vuelve a pedir resolución:
-    // con más de un launcher instalado (esta app + el de fábrica del dispositivo) y sin un
-    // "siempre" fijado, Android muestra su selector nativo de launcher — el mismo diálogo que
-    // aparece si desactivas esta app como predeterminada desde Ajustes. No desactiva ni
-    // desinstala nada, así que es reversible: se puede volver a elegir esta app en cualquier
-    // momento, desde el propio selector o desde Ajustes > Apps predeterminadas.
+    // Limpia la preferencia de "usar esta app siempre" para HOME y fuerza el selector nativo
+    // de launcher. No desactiva ni desinstala nada, así que es reversible: se puede volver a
+    // elegir esta app en cualquier momento, desde el propio selector o desde Ajustes > Apps
+    // predeterminadas.
     private void cambiarLauncher() {
         try {
             getPackageManager().clearPackagePreferredActivities(getPackageName());
@@ -751,12 +749,18 @@ public class MainActivity extends Activity {
             Log.e("PDA", "Error limpiando preferencia de launcher", e);
         }
         try {
-            Intent intent = new Intent(Intent.ACTION_MAIN);
-            intent.addCategory(Intent.CATEGORY_HOME);
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            startActivity(intent);
+            Intent intentHome = new Intent(Intent.ACTION_MAIN);
+            intentHome.addCategory(Intent.CATEGORY_HOME);
+            // Un startActivity() normal aquí podía no hacer nada visible: como esta misma
+            // app ya está en primer plano satisfaciendo el intent de HOME, Android a veces
+            // resuelve en silencio de vuelta a la misma tarea en vez de ofrecer elegir.
+            // createChooser() fuerza siempre el diálogo de selección, sin ese atajo.
+            Intent selector = Intent.createChooser(intentHome, "Elegir launcher");
+            selector.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(selector);
         } catch (Exception e) {
             Log.e("PDA", "Error abriendo selector de launcher", e);
+            Toast.makeText(this, "No se pudo abrir el selector de launcher", Toast.LENGTH_LONG).show();
         }
     }
 
