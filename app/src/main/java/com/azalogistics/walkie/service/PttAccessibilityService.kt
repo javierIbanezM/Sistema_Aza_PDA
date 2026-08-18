@@ -50,8 +50,33 @@ class PttAccessibilityService : AccessibilityService() {
     // estos dos — así el buscador de Ajustes (que también vive dentro de SubSettings y deja
     // saltar a cualquier otra pantalla) no sirve para colarse, porque el destino tendría un
     // título distinto y seguiría bloqueado.
-    private val titulosSubSettingsPermitidos = setOf("Tamaño de la fuente", "Zoom de la pantalla")
+    //
+    // En Android 13 (Memor11/MediaTek) Google fusionó "Tamaño de fuente" y "Zoom de la
+    // pantalla" en una única pantalla combinada ("Tamaño y texto de la pantalla"), con
+    // secciones tituladas "Tamaño de fuente" (sin "la", distinto texto exacto) y "Tamaño de
+    // visualización" (el nuevo nombre de lo que antes era "Zoom de la pantalla") — comprobado
+    // en el dispositivo real con "uiautomator dump". Se incluyen ambos juegos de textos para
+    // que funcione igual en Memor10 (Android 10) y Memor11 (Android 13).
+    private val titulosSubSettingsPermitidos = setOf(
+        "Tamaño de la fuente",
+        "Zoom de la pantalla",
+        "Tamaño de fuente",
+        "Tamaño de visualización"
+    )
     private val handler = Handler(Looper.getMainLooper())
+
+    // En la Settings de MediaTek (Memor11/Android 13) el evento de "Ajustes de pantalla" NO
+    // llega directamente con la clase de la Activity final: antes pasa por una o dos pantallas
+    // de carga intermedias genéricas (comprobado en el dispositivo real con logs) — primero
+    // "android.widget.FrameLayout" y luego "DeepLinkHomepageActivity" — antes de asentarse en
+    // Settings$DisplaySettingsActivity (o en la Activity final que sea, p.ej. Bluetooth).
+    // Tratarlas como "pantalla no permitida" bloqueaba siempre, porque el bloqueo saltaba antes
+    // de que el evento con la clase final llegara. Se ignoran explícitamente en vez de intentar
+    // adivinar un margen de espera fijo (los tiempos entre transiciones varían demasiado).
+    private val clasesTransitoriasSettings = setOf(
+        "android.widget.FrameLayout",
+        "com.android.settings.homepage.DeepLinkHomepageActivity"
+    )
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (!SettingsLockManager.enabled) return
@@ -59,9 +84,9 @@ class PttAccessibilityService : AccessibilityService() {
         if (event.packageName?.toString() != settingsPackageName) return
 
         val claseVentana = event.className?.toString()
-        // Pantalla principal de "Ajustes de pantalla" (no verificado aún si Android 13/Memor11
-        // resuelve ACTION_DISPLAY_SETTINGS a esta misma clase — si ahí sigue rebotando, sacar
-        // el nombre real con "adb shell dumpsys activity activities" y añadirlo aquí también).
+        if (claseVentana in clasesTransitoriasSettings) return
+
+        // Pantalla principal de "Ajustes de pantalla".
         if (claseVentana == "com.android.settings.Settings\$DisplaySettingsActivity") return
 
         if (claseVentana == "com.android.settings.SubSettings") {

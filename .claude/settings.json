@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "Bash(./gradlew.bat compileDebugKotlin compileDebugJavaWithJavac --console=plain -q)",
-      "Bash(./gradlew.bat assembleDebug --console=plain -q)"
+      "Bash(./gradlew.bat assembleDebug --console=plain -q)",
+      "PowerShell($env:PATH += \";C:\\\\Users\\\\jibañez\\\\AppData\\\\Local\\\\Android\\\\Sdk\\\\platform-tools\"; adb devices -l)",
+      "Read(//c/Users/jibañez/AppData/Local/Temp/**)"
     ]
   }
 }
