@@ -16,8 +16,8 @@ public class ServerConfig {
 
     // Host de la API (usuarios, login, heartbeat...), distinto del host que sirve la
     // página web (/home). Mismo puerto que el entorno activo en ambos casos.
-    private static final String API_URL_PRODUCCION = "http://192.168.2.33:8000";
-    private static final String API_URL_DESARROLLO = "http://192.168.2.33:8002";
+    private static final String API_URL_PRODUCCION = "http://SRVAutoN8N.zar.local:8000";
+    private static final String API_URL_DESARROLLO = "http://SRVAutoN8N.zar.local:8002";
 
     private ServerConfig() {
     }

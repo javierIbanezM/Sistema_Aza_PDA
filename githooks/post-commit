@@ -26,7 +26,7 @@ echo "[post-commit] '[deploy]' detectado — compilando y publicando actualizaci
 REPO_ROOT=$(git rev-parse --show-toplevel)
 cd "$REPO_ROOT" || exit 1
 
-DESTINO="//192.168.2.33/c\$/Users/administrador.ZAR/Desktop/ConfigN8N/printer/updates"
+DESTINO="//SRVAutoN8N.zar.local/c\$/Users/administrador.ZAR/Desktop/ConfigN8N/printer/updates"
 
 if [ ! -d "$DESTINO" ]; then
   echo "[post-commit] No se puede acceder a $DESTINO — abortando, nada publicado."
@@ -60,7 +60,7 @@ cat > "$DESTINO/versionPDA.json" <<EOF
 {
   "version": "$VERSION",
   "build_number": $BUILD,
-  "download_url": "http://192.168.2.33:5000/updates/app-debug.apk",
+  "download_url": "http://SRVAutoN8N.zar.local:5000/updates/app-debug.apk",
   "changelog": "$CHANGELOG"
 }
 EOF

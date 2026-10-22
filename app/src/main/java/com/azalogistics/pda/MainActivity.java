@@ -73,7 +73,7 @@ public class MainActivity extends Activity {
     // validar contra el servidor. Distinto del PIN real, que vive en el backend.
     private static final String PIN_EMERGENCIA_OFFLINE = "9731";
     // Debe coincidir con la constante del mismo nombre en indexDev.html/index.html.
-    private static final String URL_ACTUALIZACION = "http://192.168.2.33:5000/updates/versionPDA.json";
+    private static final String URL_ACTUALIZACION = "http://SRVAutoN8N.zar.local:5000/updates/versionPDA.json";
     private ValueCallback<Uri[]> filePathCallback;
     private Uri photoUri;
     private int volumenAnterior = -1;
@@ -209,9 +209,11 @@ public class MainActivity extends Activity {
                         ? uri.getHost().toLowerCase(java.util.Locale.ROOT) : "";
 
                 boolean hostDeConfianza =
-                        host.equals("192.168.2.20") ||
-                        host.equals("192.168.2.33") ||
+                        host.equals("ServidorWebs.zar.local") ||
+                        host.equals("SRVAutoN8N.zar.local") ||
                         host.equals("srvauton8n.zar.local") ||
+                        host.equals("SRVWhalesUAT.zar.local") ||
+                        host.equals("192.168.2.145") ||
                         host.equals("activalink.com") ||
                         host.endsWith(".activalink.com");
 
