@@ -8,27 +8,37 @@ import java.util.concurrent.ConcurrentHashMap
  * Design: a small ring keyed by sequence number. The mixer pulls one frame per tick;
  * if the expected sequence is missing we emit silence (packet-loss concealment stub)
  * and advance, so playback never stalls. Target depth keeps latency bounded.
+ *
+ * La secuencia viaja en 16 bits (ver Protocol), así que se compara con aritmética circular:
+ * al pasar de 65535 a 0, o si el emisor reinicia su contador, no se queda mudo para siempre.
  */
 class JitterBuffer(private val targetFrames: Int = 3, private val maxFrames: Int = 12) {
-
-    private class Slot(val seq: Int, val pcm: ShortArray)
 
     private val map = ConcurrentHashMap<Int, ShortArray>()
     @Volatile private var nextSeq = -1
     @Volatile private var primed = false
+    @Volatile private var fueraDeVentana = 0
     @Volatile var lastInsertMs = 0L; private set
 
     fun insert(seq: Int, pcm: ShortArray) {
         lastInsertMs = System.currentTimeMillis()
         if (nextSeq < 0) nextSeq = seq
-        // Drop very old / absurdly future packets.
-        val ahead = seq - nextSeq
-        if (ahead < -maxFrames || ahead > 256) return
+        val ahead = diff(seq, nextSeq)
+        // Drop very old / absurdly future packets — pero si llegan varios seguidos fuera de
+        // ventana es que el emisor reinició su contador (o hubo un corte largo): resincronizar
+        // en vez de descartar su audio indefinidamente.
+        if (ahead < -maxFrames || ahead > 256) {
+            if (++fueraDeVentana < RESYNC_AFTER) return
+            map.clear()
+            nextSeq = seq
+            primed = false
+        }
+        fueraDeVentana = 0
         map[seq] = pcm
         if (map.size >= targetFrames) primed = true
         // Bound memory.
         if (map.size > maxFrames) {
-            map.keys.minOrNull()?.let { if (it < nextSeq) map.remove(it) }
+            map.keys.minByOrNull { diff(it, nextSeq) }?.let { if (diff(it, nextSeq) < 0) map.remove(it) }
         }
     }
 
@@ -36,7 +46,7 @@ class JitterBuffer(private val targetFrames: Int = 3, private val maxFrames: Int
     fun pull(): ShortArray? {
         if (!primed) return null
         val out = map.remove(nextSeq)
-        nextSeq++
+        nextSeq = (nextSeq + 1) and SEQ_MASK
         if (map.isEmpty()) primed = false
         // null => loss; mixer treats as silence for this tick.
         return out ?: ShortArray(AudioConfig.SAMPLES_PER_FRAME)
@@ -46,4 +56,12 @@ class JitterBuffer(private val targetFrames: Int = 3, private val maxFrames: Int
         lastInsertMs != 0L && now - lastInsertMs > timeoutMs
 
     fun isActive(): Boolean = map.isNotEmpty()
+
+    /** Diferencia con signo entre dos secuencias de 16 bits (positivo = [a] va por delante de [b]). */
+    private fun diff(a: Int, b: Int): Int = ((a - b) shl 16) shr 16
+
+    private companion object {
+        const val SEQ_MASK = 0xFFFF
+        const val RESYNC_AFTER = 3
+    }
 }

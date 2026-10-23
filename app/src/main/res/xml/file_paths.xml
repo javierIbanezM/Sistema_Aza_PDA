@@ -1,6 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Fotos de la cámara (getExternalFilesDir(PICTURES)/PDA, ver MainActivity y ExternalWebActivity). -->
     <external-files-path
-        name="external_files"
-        path="." />
+        name="fotos"
+        path="Pictures/PDA/" />
+    <!-- APK de actualización (getExternalFilesDir(DOWNLOADS)/actualizacion.apk, ver MainActivity). -->
+    <external-files-path
+        name="actualizaciones"
+        path="Download/" />
 </paths>

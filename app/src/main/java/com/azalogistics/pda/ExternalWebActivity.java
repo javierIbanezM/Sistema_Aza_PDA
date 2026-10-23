@@ -3,6 +3,7 @@ package com.azalogistics.pda;
 import android.app.Activity;
 import android.content.Intent;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
 import android.provider.MediaStore;
@@ -14,6 +15,7 @@ import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.window.OnBackInvokedDispatcher;
 
 import androidx.annotation.Nullable;
 import androidx.core.content.FileProvider;
@@ -35,6 +37,9 @@ public class ExternalWebActivity extends Activity {
     public static final String EXTRA_URL = "url";
     private static final int FILE_CHOOSER_REQUEST = 2000;
 
+    // Instancia viva (si la hay) para poder cerrarla desde JS (alerta/cierre de sesión).
+    private static ExternalWebActivity instancia;
+
     private WebView webView;
     private ValueCallback<Uri[]> filePathCallback;
     private Uri photoUri;
@@ -42,6 +47,15 @@ public class ExternalWebActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        instancia = this;
+
+        // Con targetSdk 36 en Android 16 el sistema ya no llama a onBackPressed(): se registra
+        // un callback (API 33+) que reutiliza la misma lógica; en versiones anteriores sigue
+        // valiendo el override de abajo.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            getOnBackInvokedDispatcher().registerOnBackInvokedCallback(
+                    OnBackInvokedDispatcher.PRIORITY_DEFAULT, this::onBackPressed);
+        }
 
         webView = new WebView(this);
         setContentView(webView);
@@ -120,7 +134,16 @@ public class ExternalWebActivity extends Activity {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, String destino) {
                 String host = anfitrionDe(destino);
-                if (hostPermitido != null && hostPermitido.equals(host)) {
+                if (mismoServidor(hostPermitido, host)) {
+                    // La PDA no resuelve nombres cortos (ERR_NAME_NOT_RESOLVED con
+                    // "srvauton8n"): se recarga con el nombre completo con el que se abrió.
+                    if (!host.equals(hostPermitido)) {
+                        Uri uri = Uri.parse(destino);
+                        String autoridad = uri.getPort() == -1
+                                ? hostPermitido : hostPermitido + ":" + uri.getPort();
+                        view.loadUrl(uri.buildUpon().encodedAuthority(autoridad).build().toString());
+                        return true;
+                    }
                     return false;
                 }
                 Log.w("PDA", "ExternalWebActivity: navegación bloqueada fuera de " + hostPermitido + " -> " + destino);
@@ -148,6 +171,7 @@ public class ExternalWebActivity extends Activity {
                     if (is != null && is.available() > 0) {
                         is.close();
                         results = new Uri[]{photoUri};
+                        GaleriaUtil.guardar(this, photoUri);
                     }
                 } catch (Exception e) {
                     Log.w("PDA", "Foto cancelada o fichero vacío");
@@ -157,6 +181,31 @@ public class ExternalWebActivity extends Activity {
 
         filePathCallback.onReceiveValue(results);
         filePathCallback = null;
+    }
+
+    static void cerrarSiAbierta() {
+        if (instancia != null) instancia.finish();
+    }
+
+    @Override
+    protected void onDestroy() {
+        if (instancia == this) instancia = null;
+        super.onDestroy();
+    }
+
+    // El servidor redirige a veces al nombre corto (SRVAutoN8N) en vez del completo
+    // (srvauton8n.zar.local): es la misma máquina, así que se compara solo el primer
+    // segmento. Las IP se comparan enteras ("192" no identifica a nadie).
+    private static boolean mismoServidor(String a, String b) {
+        if (a == null || b == null) return false;
+        if (a.equals(b)) return true;
+        if (a.matches("[0-9.]+") || b.matches("[0-9.]+")) return false;
+        return primerSegmento(a).equals(primerSegmento(b));
+    }
+
+    private static String primerSegmento(String host) {
+        int punto = host.indexOf('.');
+        return punto < 0 ? host : host.substring(0, punto);
     }
 
     private static String anfitrionDe(String url) {

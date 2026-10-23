@@ -1,5 +1,6 @@
 package com.azalogistics.walkie.service
 
+import android.Manifest
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -9,11 +10,14 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.PackageManager
 import android.media.AudioManager
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
+import android.util.Log
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 import com.azalogistics.walkie.App
 import com.azalogistics.pda.AjustesBloqueo
 import com.azalogistics.pda.R
@@ -23,6 +27,7 @@ import com.azalogistics.walkie.domain.model.TxState
 import com.azalogistics.walkie.net.NetworkManager
 import com.azalogistics.walkie.ptt.PttManager
 import com.azalogistics.walkie.ui.MainActivity
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -42,14 +47,32 @@ import kotlinx.coroutines.launch
  */
 class WalkieService : Service() {
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    // Sin CoroutineExceptionHandler, cualquier excepción no capturada de net.start() (crear el
+    // AudioTrack, NSD...) tumbaba el proceso entero — incluido el WebView principal del PDA.
+    private val scope = CoroutineScope(
+        SupervisorJob() + Dispatchers.Default +
+            CoroutineExceptionHandler { _, e ->
+                Log.e(TAG, "Error no controlado en WalkieService", e)
+                WalkieRuntime.update { it.copy(connection = ConnectionState.NO_NETWORK) }
+            }
+    )
     private lateinit var net: NetworkManager
     private var wakeLock: PowerManager.WakeLock? = null
     private var volumeReceiver: BroadcastReceiver? = null
 
     override fun onCreate() {
         super.onCreate()
-        startForegroundWithNotification()
+        try {
+            startForegroundWithNotification()
+        } catch (e: Exception) {
+            // Android 14+: un servicio de tipo micrófono lanza SecurityException sin
+            // RECORD_AUDIO concedido, o ForegroundServiceStartNotAllowedException si se
+            // arrancó desde segundo plano (p.ej. BOOT_COMPLETED). Mejor parar el servicio
+            // que cerrar la app; se vuelve a arrancar desde MainActivity con el permiso ya dado.
+            Log.w(TAG, "No se pudo pasar a primer plano; se detiene WalkieService", e)
+            stopSelf()
+            return
+        }
         acquireWakeLock()
         enforceMaxVolume()
         // Estado persistido gestionado ahora desde el panel admin nativo (ver
@@ -211,11 +234,21 @@ class WalkieService : Service() {
                 }
             }
         }
-        registerReceiver(receiver, IntentFilter("android.media.VOLUME_CHANGED_ACTION"))
-        volumeReceiver = receiver
+        // Con targetSdk >= 34, registerReceiver sin flag de exportación lanza SecurityException.
+        // NOT_EXPORTED sigue recibiendo los broadcasts que envía el propio sistema.
+        try {
+            ContextCompat.registerReceiver(
+                this, receiver, IntentFilter("android.media.VOLUME_CHANGED_ACTION"),
+                ContextCompat.RECEIVER_NOT_EXPORTED
+            )
+            volumeReceiver = receiver
+        } catch (e: Exception) {
+            Log.w(TAG, "No se pudo registrar el receptor de volumen", e)
+        }
     }
 
     companion object {
+        private const val TAG = "WalkieService"
         private const val CHANNEL_ID = "walkie_fgs"
         private const val NOTIF_ID = 1001
         const val ACTION_PTT_DOWN = "com.azalogistics.walkie.PTT_DOWN"
@@ -223,9 +256,23 @@ class WalkieService : Service() {
         const val ACTION_STOP = "com.azalogistics.walkie.STOP"
 
         fun start(context: Context) {
+            // Android 14+ exige RECORD_AUDIO ya concedido para un servicio de tipo micrófono:
+            // MainActivity vuelve a llamar aquí desde onRequestPermissionsResult.
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE &&
+                ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO)
+                != PackageManager.PERMISSION_GRANTED
+            ) {
+                Log.i(TAG, "RECORD_AUDIO sin conceder: WalkieService no se arranca todavía")
+                return
+            }
             val i = Intent(context, WalkieService::class.java)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) context.startForegroundService(i)
-            else context.startService(i)
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) context.startForegroundService(i)
+                else context.startService(i)
+            } catch (e: Exception) {
+                // Arranque desde segundo plano (BOOT_COMPLETED en Android 15+, etc.).
+                Log.w(TAG, "No se pudo arrancar WalkieService", e)
+            }
         }
         fun stop(context: Context) = context.stopService(Intent(context, WalkieService::class.java))
     }

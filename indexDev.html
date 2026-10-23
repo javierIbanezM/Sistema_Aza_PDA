@@ -228,12 +228,12 @@ Iniciando sesión...
 <button onclick="AndroidApp.abrirApp('com.android.calculator2') || AndroidApp.abrirApp('com.google.android.calculator')">
   📦 Calculadora
 </button>
-<button onclick="_ventanaCDMuelles = window.open('http://ServidorWebs.zar.local/Planificador/login.php?entorno=cdmuelles', '_blank')">🚚 CD Muelles</button>
-<button onclick="_ventanaCDMuelles = window.open('http://SRVWhalesUAT.zar.local/Planificador/login.php?entorno=cdmuelles', '_blank')">🚚 CD Muelles</button>
+<button onclick="abrirEnNavegador('http://ServidorWebs.zar.local/Planificador/login.php?entorno=cdmuelles')">🚚 CD Muelles</button>
+<button onclick="abrirEnNavegador('http://SRVWhalesUAT.zar.local/Planificador/login.php?entorno=cdmuelles')">🚚 CD Muelles</button>
 <button onclick="AndroidApp.abrirApp('com.aza.scanner')">📦 Carga paqueteria</button>
-<button onclick="_ventanaActivaLink = window.open('https://azalogistics.activalink.com/index.php?action=Login&module=Users', '_blank')">🚚 ActivaLink</button>
+<button onclick="abrirEnNavegador('https://azalogistics.activalink.com/index.php?action=Login&module=Users')">🚚 ActivaLink</button>
 <button
-  onclick="AndroidApp.abrirApp('com.google.android.apps.docs') || (_ventanaActivaLink = window.open('intent://drive.google.com/#Intent;scheme=https;package=com.google.android.apps.docs;end'))">
+  onclick="AndroidApp.abrirApp('com.google.android.apps.docs') || window.open('intent://drive.google.com/#Intent;scheme=https;package=com.google.android.apps.docs;end')">
  📦 Drive
 </button>
 <input type="file" id="cameraInput" accept="image/*" capture="environment" style="display:none;" onchange="handleImageCapture(this)">
@@ -309,8 +309,7 @@ let LOGOUT_EN_PROCESO = false;
 let ALERTA_ACTIVA = false;
 let _audioCtx = null;
 let _alertaSoundLoop = null;
-let _ventanaCDMuelles = null;
-let _ventanaActivaLink = null;
+
 
 function _iniciarSonido() {
     try {
@@ -345,8 +344,7 @@ function activarAlerta(usuarioOrigen) {
     if (ALERTA_ACTIVA) return;
     ALERTA_ACTIVA = true;
     // Cerrar pestañas externas abiertas
-    try { if (_ventanaCDMuelles && !_ventanaCDMuelles.closed) { _ventanaCDMuelles.close(); _ventanaCDMuelles = null; } } catch(e) {}
-    try { if (_ventanaActivaLink && !_ventanaActivaLink.closed) { _ventanaActivaLink.close(); _ventanaActivaLink = null; } } catch(e) {}
+    cerrarNavegadorExterno();
     // Cerrar app Whales si está abierta
     try { if (typeof AndroidApp !== "undefined") AndroidApp.cerrarApp('es.tlsi.mobile'); } catch(e) {}
     // Forzar volumen al máximo vía interfaz nativa Android
@@ -732,6 +730,11 @@ function abrirEnNavegador(url) {
     }
 }
 
+// Cierra el mini-navegador interno (ExternalWebActivity) si está abierto; no-op en APK antigua.
+function cerrarNavegadorExterno() {
+    try { if (typeof AndroidApp !== "undefined" && AndroidApp.cerrarNavegador) AndroidApp.cerrarNavegador(); } catch(e) {}
+}
+
 function getDeviceId(){
     if (typeof AndroidApp !== "undefined" && AndroidApp.getSerialNumber) {
         try {
@@ -1008,8 +1011,7 @@ setInterval(async () => {
         if (d.alerta && !ALERTA_ACTIVA) {
             // Alerta nueva detectada: cerrar ventanas externas y recargar
             // para que el overlay aparezca encima de cualquier pantalla
-            try { if (_ventanaCDMuelles && !_ventanaCDMuelles.closed) { _ventanaCDMuelles.close(); _ventanaCDMuelles = null; } } catch(e) {}
-            try { if (_ventanaActivaLink && !_ventanaActivaLink.closed) { _ventanaActivaLink.close(); _ventanaActivaLink = null; } } catch(e) {}
+            cerrarNavegadorExterno();
             location.reload();
         } else if (!d.alerta) {
             desactivarAlerta();

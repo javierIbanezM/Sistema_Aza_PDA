@@ -11,6 +11,15 @@
 -keepclassmembers class * {
     @android.webkit.JavascriptInterface <methods>;
 }
+-keepattributes *Annotation*,Signature,InnerClasses
+-keep class com.azalogistics.pda.MainActivity$AndroidBridge { *; }
+
+# SDK de Datalogic (número de serie, AppManager): usa reflexión/JNI desde su propio código.
+# Sin esto, R8 puede quitar clases o campos en release y SYSTEM.SERIAL_NUMBER falla; el
+# código lo captura (Throwable) y cae en silencio a ANDROID_ID, con lo que la PDA cambiaría de
+# ID y dejaría de coincidir con su registro en el backend.
+-keep class com.datalogic.** { *; }
+-dontwarn com.datalogic.**
 
 # Uncomment this to preserve the line number information for
 # debugging stack traces.

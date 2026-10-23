@@ -3,6 +3,12 @@
   filterKeyEvents + flagRequestFilterKeyEvents lets the service receive global
   key events (incl. volume keys) even when WalkieLAN is not in foreground.
   This is the most robust way to implement a global hardware PTT on stock Android.
+
+  canRetrieveWindowContent hace falta para leer el título de la pantalla de Ajustes (bloqueo de
+  ajustes, ver PttAccessibilityService.subSettingsConTituloPermitido). packageNames limita los
+  eventos y el contenido de ventana que recibe el servicio a la app de Ajustes — sin esto podía
+  leer la pantalla de cualquier otra app (Whales, el propio PDA...). Las teclas del PTT no
+  dependen de packageNames: se entregan por onKeyEvent.
 -->
 <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
     android:accessibilityEventTypes="typeWindowStateChanged"
@@ -10,5 +16,6 @@
     android:canRequestFilterKeyEvents="true"
     android:canRetrieveWindowContent="true"
     android:accessibilityFlags="flagRequestFilterKeyEvents"
+    android:packageNames="com.android.settings"
     android:notificationTimeout="50"
     android:description="@string/ptt_accessibility_desc" />

@@ -52,6 +52,7 @@ class AudioCapture(
             // esto reduce cortes de audio sin acaparar la CPU tan agresivamente como antes.
             android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_URGENT_AUDIO)
             val frame = ShortArray(AudioConfig.SAMPLES_PER_FRAME)
+            var fallosSeguidos = 0
             while (running) {
                 var read = 0
                 while (read < frame.size && running) {
@@ -59,7 +60,16 @@ class AudioCapture(
                     if (r <= 0) break
                     read += r
                 }
-                if (read == frame.size) onFrame(frame)
+                if (read == frame.size) {
+                    fallosSeguidos = 0
+                    onFrame(frame)
+                } else if (running) {
+                    // Lectura fallida (micrófono ocupado, objeto muerto...): sin pausa este
+                    // bucle giraba al 100 % de CPU a prioridad de audio. Se reintenta con
+                    // espera, más larga si el fallo persiste.
+                    fallosSeguidos++
+                    try { Thread.sleep(if (fallosSeguidos > 50) 200L else 20L) } catch (_: InterruptedException) { break }
+                }
             }
         }
     }

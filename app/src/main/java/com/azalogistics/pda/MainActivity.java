@@ -5,7 +5,6 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.DownloadManager;
 import android.content.BroadcastReceiver;
-import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
@@ -19,6 +18,7 @@ import android.net.NetworkCapabilities;
 import android.net.NetworkInfo;
 import android.net.Uri;
 import android.os.Build;
+import android.window.OnBackInvokedDispatcher;
 import android.os.Bundle;
 import android.os.Environment;
 import android.os.Handler;
@@ -44,6 +44,7 @@ import android.widget.RadioButton;
 import android.widget.RadioGroup;
 import android.widget.Toast;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
@@ -63,7 +64,6 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.OutputStream;
 
 public class MainActivity extends Activity {
 
@@ -71,7 +71,7 @@ public class MainActivity extends Activity {
     private static final int FILE_CHOOSER_REQUEST = 1000;
     // PIN de emergencia solo para cuando no hay conexión y por tanto no se puede
     // validar contra el servidor. Distinto del PIN real, que vive en el backend.
-    private static final String PIN_EMERGENCIA_OFFLINE = "9731";
+    private static final String PIN_EMERGENCIA_OFFLINE = "9173";
     // Debe coincidir con la constante del mismo nombre en indexDev.html/index.html.
     private static final String URL_ACTUALIZACION = "http://SRVAutoN8N.zar.local:5000/updates/versionPDA.json";
     private ValueCallback<Uri[]> filePathCallback;
@@ -133,6 +133,7 @@ public class MainActivity extends Activity {
         ocultarBarras();
         bloquearBarraNotificaciones();
         registrarReceptorDescarga();
+        registrarGestoAtras();
         WalkieService.Companion.start(this);
 
         WebSettings settings = webView.getSettings();
@@ -209,10 +210,10 @@ public class MainActivity extends Activity {
                         ? uri.getHost().toLowerCase(java.util.Locale.ROOT) : "";
 
                 boolean hostDeConfianza =
-                        host.equals("ServidorWebs.zar.local") ||
+                        host.equals("servidorwebs.zar.local") ||
                         host.equals("SRVAutoN8N.zar.local") ||
                         host.equals("srvauton8n.zar.local") ||
-                        host.equals("SRVWhalesUAT.zar.local") ||
+                        host.equals("srvwhalesuat.zar.local") ||
                         host.equals("192.168.2.145") ||
                         host.equals("activalink.com") ||
                         host.endsWith(".activalink.com");
@@ -320,6 +321,17 @@ public class MainActivity extends Activity {
         } else {
             NetworkInfo netInfo = cm.getActiveNetworkInfo();
             return netInfo != null && netInfo.isConnected();
+        }
+    }
+
+    // WalkieService.start() no arranca en Android 14+ sin RECORD_AUDIO (servicio de tipo
+    // micrófono): en el primer arranque el permiso aún no está dado, así que se reintenta aquí.
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions,
+                                           @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == 1) {
+            WalkieService.Companion.start(this);
         }
     }
 
@@ -543,6 +555,11 @@ public class MainActivity extends Activity {
                     Log.e("PDA", "Error abrirNavegador: " + url, e);
                 }
             });
+        }
+
+        @JavascriptInterface
+        public void cerrarNavegador() {
+            runOnUiThread(ExternalWebActivity::cerrarSiAbierta);
         }
 
         @JavascriptInterface
@@ -1018,6 +1035,16 @@ public class MainActivity extends Activity {
     // (que avisa a /logs/logout) — la sesión quedaba huérfana en el backend aunque en
     // pantalla pareciera deslogueado. Con sesión activa, "atrás" ahora dispara ese
     // logout() real vía JS en lugar de navegar el historial.
+    // Con targetSdk 36 en Android 16 el sistema ya no llama a onBackPressed() (gesto atrás
+    // predictivo): hay que registrar un callback en el dispatcher (API 33+) que reutilice esta
+    // misma lógica. En versiones anteriores sigue funcionando el override de abajo.
+    private void registrarGestoAtras() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            getOnBackInvokedDispatcher().registerOnBackInvokedCallback(
+                    OnBackInvokedDispatcher.PRIORITY_DEFAULT, this::onBackPressed);
+        }
+    }
+
     @Override
     public void onBackPressed() {
         webView.evaluateJavascript(
@@ -1057,7 +1084,7 @@ public class MainActivity extends Activity {
                         if (is != null && is.available() > 0) {
                             is.close();
                             results = new Uri[]{photoUri};
-                            saveImageToGallery(photoUri);
+                            GaleriaUtil.guardar(this, photoUri);
                         }
                     } catch (Exception e) {
                         Log.w("PDA", "Foto cancelada o fichero vacío");
@@ -1070,31 +1097,4 @@ public class MainActivity extends Activity {
         }
     }
 
-    private void saveImageToGallery(Uri imageUri) {
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                ContentValues values = new ContentValues();
-                values.put(MediaStore.Images.Media.DISPLAY_NAME,
-                        "IMG_" + System.currentTimeMillis());
-                values.put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg");
-                values.put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/PDA");
-
-                Uri uri = getContentResolver().insert(
-                        MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values);
-
-                if (uri != null) {
-                    try (InputStream in = getContentResolver().openInputStream(imageUri);
-                         OutputStream out = getContentResolver().openOutputStream(uri)) {
-                        byte[] buffer = new byte[1024];
-                        int read;
-                        while ((read = in.read(buffer)) != -1) {
-                            out.write(buffer, 0, read);
-                        }
-                    }
-                }
-            }
-        } catch (Exception e) {
-            Log.e("PDA", "Error guardar imagen", e);
-        }
-    }
 }
