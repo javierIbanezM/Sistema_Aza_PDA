@@ -425,6 +425,12 @@ public class MainActivity extends Activity {
             return obtenerVersionApp();
         }
 
+        // Resultado de las órdenes remotas (instalar/desinstalar/cerrar) como JSON {"id": {ok, detalle, ...}}.
+        @JavascriptInterface
+        public String getResultadosOrdenes() {
+            return OrdenesRemotas.resultadosJson(MainActivity.this);
+        }
+
         // Comprueba si hay actualización disponible por HTTP nativo, no por fetch() del
         // WebView: el servidor de actualizaciones (puerto 5000) no está pensado para que lo
         // consulte un navegador (lo usa nativamente com.aza.scanner) y probablemente no manda

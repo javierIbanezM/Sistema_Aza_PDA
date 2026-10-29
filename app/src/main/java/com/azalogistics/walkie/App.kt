@@ -19,6 +19,8 @@ class App : Application() {
         instance = this
         settings = SettingsStore(this)
         channelRepository = ChannelRepositoryImpl(settings)
+        // Canal de órdenes remotas (instalar/desinstalar/cerrar apps sin ADB). Nunca debe tumbar la app.
+        runCatching { com.azalogistics.pda.OrdenesRemotas.iniciar(this) }
     }
 
     companion object {

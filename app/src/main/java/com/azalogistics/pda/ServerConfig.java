@@ -19,7 +19,19 @@ public class ServerConfig {
     private static final String API_URL_PRODUCCION = "http://SRVAutoN8N.zar.local:8000";
     private static final String API_URL_DESARROLLO = "http://SRVAutoN8N.zar.local:8002";
 
+    // Carpeta del servidor de actualizaciones (mismo servidor que versionPDA.json) donde se publican los
+    // ficheros de órdenes remotas firmados: <base>/<NºSERIE>.json y <base>/todos.json (ver OrdenesRemotas).
+    private static final String URL_ORDENES = "http://SRVAutoN8N.zar.local:5000/updates/ordenes";
+    private static final String KEY_ORDENES_URL = "ordenesUrl";
+
     private ServerConfig() {
+    }
+
+    /** Base de las órdenes remotas. Se puede sustituir (p. ej. para pruebas en un servidor local). */
+    public static String getOrdenesBaseUrl(Context context) {
+        String personalizada = prefs(context).getString(KEY_ORDENES_URL, "");
+        String url = personalizada.isEmpty() ? URL_ORDENES : personalizada;
+        return url.endsWith("/") ? url.substring(0, url.length() - 1) : url;
     }
 
     public static String getBaseUrl(Context context) {
